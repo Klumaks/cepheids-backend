@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Атлас цефеид — лента</title>
+    <link rel="stylesheet" href="/static/styles/style.css">
+</head>
+
+<body>
+    <div class="app">
+        <video class="feed-video" src="{{ .VideoURL }}" autoplay muted loop playsinline preload="auto"></video>
+
+        <div class="rail">
+            <div class="rail-item"><span class="rail-circle rail-accent">&#9829;</span><span class="rail-count">{{ .Likes }}</span></div>
+            <div class="rail-item"><span class="rail-circle">a</span><span class="rail-count">{{ .Class.PlSlope }}</span></div>
+            <div class="rail-item"><span class="rail-circle">b</span><span class="rail-count">{{ .Class.PlIntercept }}</span></div>
+            <a class="rail-item" href="/feed/{{ .Class.ID }}?next=true">
+                <span class="rail-circle rail-accent">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5V19M12 19L5 12M12 19L19 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+            </a>
+        </div>
+
+        <div class="feed-info">
+            <h1>{{ .Class.Name }}</h1>
+            <p class="feed-desc">{{ .Class.Description }}
+            <details class="more">
+                <summary>… Больше</summary>{{ .Class.Details }}
+            </details>
+            </p>
+        </div>
+
+        <nav class="tabbar">
+            <a href="/feed" class="active"><span class="tab-icon">&#8801;</span>Лента</a>
+            <a href="/add"><span class="tab-icon">+</span>Добавление</a>
+            <a href="/classes"><span class="tab-icon">&#8862;</span>Плитка</a>
+        </nav>
+    </div>
+</body>
+
+</html>

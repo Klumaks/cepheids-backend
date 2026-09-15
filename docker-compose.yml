@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   minio:
     image: minio/minio
@@ -13,5 +12,17 @@ services:
       - minio-data:/data
     command: server /data --console-address ":9001"
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+
 volumes:
   minio-data:
+  portainer-data:

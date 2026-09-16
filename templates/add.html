@@ -1,57 +1,95 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Атлас цефеид — добавление</title>
     <link rel="stylesheet" href="/static/styles/style.css">
 </head>
-
 <body>
     <div class="app">
         <div class="page">
             <h1 class="page-title">Добавление класса</h1>
 
-            <section class="block">
-                <h2 class="block-label">Медиафайлы</h2>
-                <div class="media-row">
-                    <figure>
-                        <label class="media-upload">
-                            <input type="file" accept="image/*" hidden>
-                            <span class="media-icon">&#128247;</span>
-                            <span class="media-label">Выбрать изображение</span>
-                        </label>
-                        <figcaption>Изображение</figcaption>
-                    </figure>
-                    <figure>
-                        <label class="media-upload">
-                            <input type="file" accept="video/*" hidden>
-                            <span class="media-icon">&#9654;</span>
-                            <span class="media-label">Выбрать видео</span>
-                        </label>
-                        <figcaption>Видео</figcaption>
-                    </figure>
-                </div>
-            </section>
+            {{ if .HasDraft }}
+            <!-- ============ ЧЕРНОВИК ЕСТЬ → ПУБЛИКАЦИЯ ============ -->
+            <form action="/publish" method="POST">
+                <section class="block">
+                    <h2 class="block-label">Медиафайлы</h2>
+                    <div class="media-row">
+                        <figure>
+                            <img src="{{ .ImageURL }}" alt="изображение">
+                            <figcaption>Изображение</figcaption>
+                        </figure>
+                        <figure>
+                            <video src="{{ .VideoURL }}" muted loop playsinline preload="metadata"></video>
+                            <figcaption>Видео</figcaption>
+                        </figure>
+                    </div>
+                </section>
 
-            <section class="block">
-                <h2 class="block-label">Идентификация</h2>
-                <label class="field-label">Название</label>
-                <input class="field" placeholder="Введите название класса" value="">
-                <label class="field-label">Описание</label>
-                <input class="field" placeholder="Введите краткое описание" value="">
-            </section>
+                <input type="hidden" name="class_id" value="{{ .Draft.ID }}">
 
-            <section class="block">
-                <h2 class="block-label">Математические параметры</h2>
-                <label class="field-label">Наклон a</label>
-                <input class="field" type="number" step="0.01" placeholder="Например, -2.75">
-                <label class="field-label">Свободный член b</label>
-                <input class="field" type="number" step="0.01" placeholder="Например, -1.30">
-            </section>
+                <section class="block">
+                    <h2 class="block-label">Идентификация</h2>
+                    <label class="field-label">Название</label>
+                    <input class="field" value="{{ .Draft.Name }}" disabled>
+                    <label class="field-label">Описание</label>
+                    <textarea class="field" name="description" rows="6"
+                              placeholder="Введите описание (можно с переносами строк)" required></textarea>
+                </section>
 
+                <section class="block">
+                    <h2 class="block-label">Математические параметры</h2>
+                    <label class="field-label">Наклон a</label>
+                    <input class="field" type="number" step="0.01" name="pl_slope"
+                           placeholder="Например, -2.75" required>
+                    <label class="field-label">Свободный член b</label>
+                    <input class="field" type="number" step="0.01" name="pl_intercept"
+                           placeholder="Например, -1.30" required>
+                </section>
 
+                <button class="btn btn-block" type="submit">Опубликовать</button>
+            </form>
+
+            {{ else }}
+            <!-- ============ ЧЕРНОВИКА НЕТ → СОЗДАНИЕ ============ -->
+            <form action="/add" method="POST" enctype="multipart/form-data">
+                <section class="block">
+                    <h2 class="block-label">Медиафайлы</h2>
+                    <div class="media-row">
+                        <figure>
+                            <div class="media-preview">
+                                <img src="{{ .ImageURL }}" alt="изображение по умолчанию">
+                                <label class="media-overlay">
+                                    <input type="file" name="image" accept="image/*" hidden>
+                                    <span>&#128247; Выбрать</span>
+                                </label>
+                            </div>
+                            <figcaption>Изображение</figcaption>
+                        </figure>
+                        <figure>
+                            <div class="media-preview">
+                                <video src="{{ .VideoURL }}" muted loop playsinline preload="metadata"></video>
+                                <label class="media-overlay">
+                                    <input type="file" name="video" accept="video/*" hidden>
+                                    <span>&#9654; Выбрать</span>
+                                </label>
+                            </div>
+                            <figcaption>Видео</figcaption>
+                        </figure>
+                    </div>
+                </section>
+
+                <section class="block">
+                    <h2 class="block-label">Идентификация</h2>
+                    <label class="field-label">Название</label>
+                    <input class="field" name="name" placeholder="Введите название класса" required>
+                </section>
+
+                <button class="btn btn-block" type="submit">Далее</button>
+            </form>
+            {{ end }}
         </div>
 
         <nav class="tabbar">
@@ -61,5 +99,4 @@
         </nav>
     </div>
 </body>
-
 </html>

@@ -1,0 +1,6 @@
+.env
+.idea/
+*.exe
+cepheids-backend
+cmd/cepheids/cepheids
+cmd/migrate/migrate

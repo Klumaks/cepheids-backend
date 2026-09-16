@@ -15,24 +15,25 @@
 
 body {
     background: #101010;
-    display: flex;
-    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
     font-family: "Segoe UI", Arial, Helvetica, sans-serif;
     overflow-x: hidden;
 }
 
-/* Адаптивно: на десктопе ровно 390×844, на телефоне — на весь экран */
+/* Фрейм: во всю высоту экрана, ширина по мобильной пропорции 390:844 */
 .app {
     position: relative;
-    width: min(390px, 100vw);
-    height: min(844px, 100vh);
-    height: min(844px, 100dvh); /* современные мобильные: учитывает адресную строку */
+    width: min(100vw, calc(100dvh * 390 / 844));
+    height: 100vh;
+    height: 100dvh;
+    margin: 0 auto;
     overflow: hidden;
     background: var(--bg);
     color: var(--text);
 }
 
-/* Лента */
+/* ============ ЛЕНТА ============ */
 .feed-video {
     position: absolute;
     inset: 0;
@@ -58,14 +59,36 @@ body {
     margin-top: 6px;
 }
 
-.more {
-    display: inline;
+/* Сохраняем переносы строк из БД, лишние пробелы схлопываем */
+.feed-desc,
+.more .full {
+    white-space: pre-line;
+    line-height: 1.4;
 }
 
+/* ---------- «… Больше» / «Свернуть» ---------- */
 .more summary {
-    display: inline;
-    color: var(--accent);
+    list-style: none;
     cursor: pointer;
+}
+
+.more summary::-webkit-details-marker { display: none; }
+.more summary::marker { content: ""; }
+
+.more .label-more,
+.more .label-less {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.more .label-less { display: none; }
+
+.more[open] .preview { display: none; }
+.more[open] .label-less { display: inline; }
+
+.more .full {
+    margin-top: 4px;
+    color: var(--text);
 }
 
 .rail {
@@ -108,7 +131,7 @@ body {
     font-size: 12px;
 }
 
-/* Страницы с прокруткой */
+/* ============ СТРАНИЦЫ С ПРОКРУТКОЙ ============ */
 .page {
     position: absolute;
     top: 0;
@@ -140,6 +163,7 @@ body {
     margin-bottom: 10px;
 }
 
+/* ============ МЕДИА В БЛОКЕ «МЕДИАФАЙЛЫ» ============ */
 .media-row {
     display: flex;
     gap: 12px;
@@ -150,44 +174,59 @@ body {
     min-width: 0;
 }
 
-/* Кликабельный блок прикрепления файла */
-.media-upload {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-    height: 90px;
-    background: var(--input);
-    border: 1px dashed var(--accent);
-    border-radius: var(--r);
-    cursor: pointer;
-    color: var(--text);
-    transition: background 0.15s ease;
-}
-
-.media-upload:hover {
-    background: #4a4a4a;
-}
-
-.media-icon {
-    font-size: 20px;
-    color: var(--accent);
-}
-
-.media-label {
-    font-size: 11px;
-    text-align: center;
-    padding: 0 6px;
-}
-
-.media-row img {
+.media-row img,
+.media-row video {
     width: 100%;
     height: 90px;
     object-fit: cover;
     border-radius: var(--r);
     display: block;
+    background: var(--input);
+}
+
+/* Превью с кнопкой «Выбрать» поверх */
+.media-preview {
+    position: relative;
+    width: 100%;
+    height: 90px;
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--input);
+    border: 1px dashed var(--accent);
+}
+
+.media-preview img,
+.media-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.media-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.media-overlay:hover {
+    background: rgba(218, 112, 77, 0.55);
+}
+
+.media-overlay span {
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: var(--r);
 }
 
 figcaption {
@@ -195,6 +234,7 @@ figcaption {
     margin-top: 4px;
 }
 
+/* ============ ПОЛЯ ВВОДА ============ */
 .field-label {
     display: block;
     font-size: 11px;
@@ -215,14 +255,30 @@ figcaption {
     color: #8a8a8a;
 }
 
-/* Плитка */
-.filter {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 14px;
+.field:disabled {
+    color: #8a8a8a;
+    cursor: not-allowed;
 }
 
+/* Textarea для длинного описания */
+textarea.field {
+    width: 100%;
+    background: var(--input);
+    border: none;
+    border-radius: var(--r);
+    color: var(--text);
+    padding: 10px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+}
+
+textarea.field::placeholder {
+    color: #8a8a8a;
+}
+
+/* ============ КНОПКИ ============ */
 .btn {
     background: var(--accent);
     color: #fff;
@@ -240,10 +296,24 @@ figcaption {
     margin-bottom: 12px;
 }
 
+/* ============ ФИЛЬТР И ПЛИТКА ============ */
+.filter {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
 .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+}
+
+.card-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .card {
@@ -278,7 +348,30 @@ figcaption {
     color: var(--accent);
 }
 
-/* Таб-панель */
+.delete-form {
+    margin-top: 6px;
+}
+
+.delete-btn {
+    width: 100%;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--r);
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.delete-btn:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ============ ТАБ-ПАНЕЛЬ ============ */
 .tabbar {
     position: absolute;
     left: 0;

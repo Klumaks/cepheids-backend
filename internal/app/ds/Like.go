@@ -1,6 +1,5 @@
 package ds
 
-// Like — таблица м-м «пользователи ↔ спектральные классы»
 type Like struct {
 	ID              uint `gorm:"primaryKey"`
 	UserID          uint `gorm:"not null;uniqueIndex:idx_user_class"`

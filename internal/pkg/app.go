@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	"fmt"
+	"net"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -30,8 +30,15 @@ func (a *Application) RunApp() {
 	a.Handler.RegisterHandler(a.Router)
 	a.Handler.RegisterStatic(a.Router)
 
-	addr := fmt.Sprintf("%s:%d", a.Config.ServiceHost, a.Config.ServicePort)
-	if err := a.Router.Run(addr); err != nil {
+	// Явный IPv4-only сокет: WSL пробросит его в Windows как 127.0.0.1
+	addr := "0.0.0.0:8080"
+	listener, err := net.Listen("tcp4", addr)
+	if err != nil {
+		logrus.Fatalf("listen error: %v", err)
+	}
+
+	logrus.Info("Listening on ", addr)
+	if err := a.Router.RunListener(listener); err != nil {
 		logrus.Fatal(err)
 	}
 	logrus.Info("Server down")

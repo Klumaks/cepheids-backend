@@ -5,41 +5,50 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"cepheids-backend/internal/app/repository"
+	"cepheids-backend/internal/pkg"
 )
 
-const (
-	minioURL = "http://localhost:9000/cepheids"
-	// TODO: заменить на реальную авторизацию в ЛР4
-	currentUserID = 1
-)
+const minioURL = "http://localhost:9000/cepheids"
 
-type Handler struct {
-	Repository *repository.Repository
+var currentUserID uint = 1
+
+func GetCurrentUserID() uint {
+	return currentUserID
 }
 
-func NewHandler(r *repository.Repository) *Handler {
-	return &Handler{Repository: r}
+type Handler struct {
+	Repository  *repository.Repository
+	MinioClient *pkg.MinioClient
+}
+
+func NewHandler(r *repository.Repository, minioClient *pkg.MinioClient) *Handler {
+	return &Handler{
+		Repository:  r,
+		MinioClient: minioClient,
+	}
 }
 
 func (h *Handler) RegisterHandler(router *gin.Engine) {
-	router.GET("/feed", h.Feed)
-	router.GET("/feed/:id", h.Feed)
-	router.GET("/add", h.Add)
-	router.GET("/classes", h.Classes)
-	router.POST("/add", h.CreateDraft)
-	router.POST("/publish", h.Publish)
-	router.POST("/classes/delete", h.DeleteClass)
-}
+	api := router.Group("/api")
+	{
+		// Домен услуги
+		api.GET("/cepheids", h.GetCepheids)
+		api.GET("/cepheids/feed", h.GetFeed)
+		api.GET("/cepheids/feed/:id", h.GetFeedByID)
+		api.GET("/cepheids/draft", h.GetDraft)
+		api.POST("/cepheids", h.CreateCepheid)
+		api.PUT("/cepheids/:id/publish", h.PublishCepheid)
+		api.DELETE("/cepheids/:id", h.DeleteCepheid)
+		api.POST("/cepheids/:id/like", h.LikeCepheid)
 
-func (h *Handler) RegisterStatic(router *gin.Engine) {
-	router.LoadHTMLGlob("templates/*")
-	router.Static("/static", "./resources")
+		// Домен пользователь
+		api.POST("/users/register", h.RegisterUser)
+		api.POST("/users/login", h.LoginUser)
+		api.POST("/users/logout", h.LogoutUser)
+	}
 }
 
 func (h *Handler) errorHandler(ctx *gin.Context, code int, err error) {
 	logrus.Error(err.Error())
-	ctx.JSON(code, gin.H{
-		"status":      "error",
-		"description": err.Error(),
-	})
+	ctx.Status(code)
 }

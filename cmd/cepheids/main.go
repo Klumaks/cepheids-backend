@@ -1,33 +1,24 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
+	"log"
+	"os"
 
-	"cepheids-backend/internal/app/config"
-	"cepheids-backend/internal/app/dsn"
-	"cepheids-backend/internal/app/handler"
-	"cepheids-backend/internal/app/repository"
-	"cepheids-backend/internal/pkg"
+	"github.com/joho/godotenv"
+
+	"cepheids-backend/internal/api"
 )
 
 func main() {
+	// Загружаем переменные окружения
 	_ = godotenv.Load()
 
-	router := gin.Default()
-
-	conf, err := config.NewConfig()
-	if err != nil {
-		logrus.Fatalf("error loading config: %v", err)
+	// Устанавливаем DATABASE_URL если не задан
+	if os.Getenv("DATABASE_URL") == "" {
+		os.Setenv("DATABASE_URL", "host=localhost user=myuser password=mypassword dbname=cepheids_db port=5433 sslmode=disable")
 	}
 
-	rep, err := repository.New(dsn.FromEnv())
-	if err != nil {
-		logrus.Fatalf("error initializing repository: %v", err)
-	}
-
-	hand := handler.NewHandler(rep)
-	app := pkg.NewApp(conf, router, hand)
-	app.RunApp()
+	log.Println("Application start!")
+	api.StartServer()
+	log.Println("Application terminated!")
 }

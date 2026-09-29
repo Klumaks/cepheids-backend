@@ -8,21 +8,27 @@ const (
 	StatusDeleted   = "deleted"
 )
 
-// SpectralClass — «услуга» по теме: спектральный класс цефеид
 type SpectralClass struct {
-	ID          int       `gorm:"primaryKey"`                                    // NOT NULL, PK
-	Status      string    `gorm:"type:varchar(15);not null;default:'draft'"`     // NOT NULL
-	Name        string    `gorm:"type:varchar(100);not null"`                    // NOT NULL
-	Description string    `gorm:"type:varchar(500)"`                             // NULL (необязательное)
-	ImageKey    string    `gorm:"type:varchar(100)"`                             // NULL (url, необязательное)
-	VideoKey    string    `gorm:"type:varchar(100)"`                             // NULL (url, необязательное)
-	PlSlope     *float64                                                        // NULL (поле по теме, необязательное)
-	PlIntercept *float64                                                        // NULL (поле по теме, необязательное)
-	CreatorID   uint      `gorm:"not null"`                                     // NOT NULL, FK на users
-	CreatedAt   time.Time                                                       // NOT NULL (дата создания, авто)
-	UpdatedAt   time.Time                                                       // NULL (дата формирования, авто)
+	ID          int        `gorm:"primaryKey" json:"id"`
+	Status      string     `gorm:"type:varchar(15);not null;default:'draft'" json:"-"`
+	Name        string     `gorm:"type:varchar(100);not null" json:"name"`
+	Description string     `gorm:"type:varchar(500)" json:"description"`
+	ImageKey    string     `gorm:"type:varchar(100)" json:"image_key"`
+	VideoKey    string     `gorm:"type:varchar(100)" json:"video_key"`
+	PlSlope     *float64   `gorm:"default:null" json:"pl_slope"`
+	PlIntercept *float64   `gorm:"default:null" json:"pl_intercept"`
+	CreatorID   uint       `gorm:"not null" json:"creator_id"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 
-	Creator User `gorm:"foreignKey:CreatorID;constraint:OnDelete:RESTRICT"`
+	Creator User `gorm:"foreignKey:CreatorID;constraint:OnDelete:RESTRICT" json:"-"`
+
+	// Дополнительные поля для API ответов
+	ImageURL   string `gorm:"-" json:"image_url"`
+	VideoURL   string `gorm:"-" json:"video_url"`
+	LikesCount int64  `gorm:"-" json:"likes_count"`
+	IsMine     bool   `gorm:"-" json:"is_mine"`
+	IsLiked    bool   `gorm:"-" json:"is_liked"`
 }
 
 func (SpectralClass) TableName() string { return "spectral_classes" }

@@ -8,8 +8,6 @@ import (
 	"cepheids-backend/internal/app/ds"
 )
 
-// ---------- Чтение ----------
-
 // GetPublishedClasses — все опубликованные
 func (r *Repository) GetPublishedClasses() ([]ds.SpectralClass, error) {
 	var classes []ds.SpectralClass
@@ -29,7 +27,7 @@ func (r *Repository) GetClassByID(id int) (ds.SpectralClass, error) {
 	return c, err
 }
 
-// GetNextClass — следующая опубликованная, с заворотом на первую
+// GetNextClass — следующая опубликованная
 func (r *Repository) GetNextClass(id int) (ds.SpectralClass, error) {
 	var next ds.SpectralClass
 	err := r.db.
@@ -55,7 +53,7 @@ func (r *Repository) GetDraftClass(creatorID uint) (ds.SpectralClass, error) {
 	return c, err
 }
 
-// GetFilteredClasses — фильтрация по диапазонам pl_slope и pl_intercept
+// GetFilteredClasses — фильтрация по диапазонам
 func (r *Repository) GetFilteredClasses(minSlope, maxSlope, minB, maxB *float64) ([]ds.SpectralClass, error) {
 	var classes []ds.SpectralClass
 	query := r.db.Where("status = ?", ds.StatusPublished)
@@ -77,37 +75,34 @@ func (r *Repository) GetFilteredClasses(minSlope, maxSlope, minB, maxB *float64)
 	return classes, err
 }
 
-// ---------- Создание и публикация через ORM ----------
-
-// CreateDraft — создаёт черновик для пользователя
-func (r *Repository) CreateDraft(creatorID uint, name string) (ds.SpectralClass, error) {
+// CreateCepheid — создание черновика с файлами
+func (r *Repository) CreateCepheid(creatorID uint, name, imageKey, videoKey string) (ds.SpectralClass, error) {
 	c := ds.SpectralClass{
 		Status:    ds.StatusDraft,
 		Name:      name,
+		ImageKey:  imageKey,
+		VideoKey:  videoKey,
 		CreatorID: creatorID,
 	}
 	err := r.db.Create(&c).Error
 	return c, err
 }
 
-// PublishClass — смена статуса на published и сохранение заполненных полей.
-// plSlope/plIntercept — указатели: nil означает «поле не заполнено»,
-// тогда колонка в БД остаётся NULL (поля по теме необязательные).
-func (r *Repository) PublishClass(id int, creatorID uint, description string, plSlope, plIntercept *float64) error {
-	updates := map[string]interface{}{
-		"status":      ds.StatusPublished,
-		"description": description,
-	}
-	if plSlope != nil {
-		updates["pl_slope"] = *plSlope
-	}
-	if plIntercept != nil {
-		updates["pl_intercept"] = *plIntercept
-	}
+// CreateDraft — создание черновика (старый метод для совместимости)
+func (r *Repository) CreateDraft(creatorID uint, name string) (ds.SpectralClass, error) {
+	return r.CreateCepheid(creatorID, name, "", "")
+}
 
+// PublishClass — публикация
+func (r *Repository) PublishClass(id int, creatorID uint, description string, plSlope, plIntercept float64) error {
 	res := r.db.Model(&ds.SpectralClass{}).
 		Where("id = ? AND creator_id = ? AND status = ?", id, creatorID, ds.StatusDraft).
-		Updates(updates)
+		Updates(map[string]interface{}{
+			"status":       ds.StatusPublished,
+			"description":  description,
+			"pl_slope":     plSlope,
+			"pl_intercept": plIntercept,
+		})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -117,35 +112,55 @@ func (r *Repository) PublishClass(id int, creatorID uint, description string, pl
 	return nil
 }
 
-// ---------- Логическое удаление через SQL-курсор (без ORM) ----------
-
-// DeleteClassSQL — soft-delete через «сырой» SQL и курсор
-func (r *Repository) DeleteClassSQL(id int) error {
+// DeleteClassSQL — удаление (только свои)
+func (r *Repository) DeleteClassSQL(id int, creatorID uint) error {
 	query := `
 		UPDATE spectral_classes
 		SET status = 'deleted', updated_at = NOW()
-		WHERE id = $1 AND status != 'deleted'
+		WHERE id = $1 AND creator_id = $2 AND status != 'deleted'
 		RETURNING id`
 
-	row := r.db.Raw(query, id).Row()
+	row := r.db.Raw(query, id, creatorID).Row()
 
 	var returnedID int
 	if err := row.Scan(&returnedID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("класс %d не найден или уже удалён", id)
+			return fmt.Errorf("класс %d не найден или не принадлежит пользователю", id)
 		}
 		return fmt.Errorf("ошибка удаления: %w", err)
 	}
 	return nil
 }
 
-// ---------- Лайки ----------
-
-// GetLikesCount — количество лайков у класса
+// GetLikesCount — количество лайков
 func (r *Repository) GetLikesCount(classID int) (int64, error) {
 	var count int64
 	err := r.db.Model(&ds.Like{}).
 		Where("spectral_class_id = ?", classID).
 		Count(&count).Error
 	return count, err
+}
+
+// IsLikedByUser — лайкнул ли пользователь
+func (r *Repository) IsLikedByUser(classID int, userID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&ds.Like{}).
+		Where("spectral_class_id = ? AND user_id = ?", classID, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// AddLike — добавить лайк
+func (r *Repository) AddLike(userID uint, classID int) error {
+	like := ds.Like{
+		UserID:          userID,
+		SpectralClassID: classID,
+	}
+	return r.db.Create(&like).Error
+}
+
+// RemoveLike — удалить лайк
+func (r *Repository) RemoveLike(userID uint, classID int) error {
+	return r.db.Where("user_id = ? AND spectral_class_id = ?", userID, classID).
+		Delete(&ds.Like{}).Error
 }

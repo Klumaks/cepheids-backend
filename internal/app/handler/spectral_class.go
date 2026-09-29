@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -11,117 +12,15 @@ import (
 	"cepheids-backend/internal/app/ds"
 )
 
-// Порог: сколько рун показывать до кнопки «Больше»
-const descPreviewLen = 20
-
-// previewRunes обрезает строку по рунам (кириллица считается как 1 символ)
-// Возвращает превью и флаг: true — есть что скрывать
-func previewRunes(s string, n int) (string, bool) {
-	r := []rune(s)
-	if len(r) <= n {
-		return s, false
-	}
-	return string(r[:n]), true
-}
-
-// mediaURL — URL из MinIO или дефолтный с SSR-сервера, если ключ пустой
-func mediaURL(key, defaultPath string) string {
+func (h *Handler) mediaURL(key string) string {
 	if key == "" {
-		return defaultPath
+		return ""
 	}
 	return minioURL + "/" + key
 }
 
-// floatToStr — форматирует nullable-число для шаблона; nil → placeholder
-func floatToStr(v *float64, placeholder string) string {
-	if v == nil {
-		return placeholder
-	}
-	return fmt.Sprintf("%.2f", *v)
-}
-
-// ---------- GET /feed и /feed/:id ----------
-func (h *Handler) Feed(ctx *gin.Context) {
-	idStr := ctx.Param("id")
-	var (
-		c   ds.SpectralClass
-		err error
-	)
-
-	if idStr == "" {
-		// первый опубликованный
-		var all []ds.SpectralClass
-		all, err = h.Repository.GetPublishedClasses()
-		if err == nil && len(all) > 0 {
-			c = all[0]
-		} else {
-			err = http.ErrNoLocation
-		}
-	} else {
-		id, _ := strconv.Atoi(idStr)
-		if ctx.Query("next") == "true" {
-			c, err = h.Repository.GetNextClass(id)
-		} else {
-			c, err = h.Repository.GetClassByID(id)
-		}
-	}
-
-	if err != nil {
-		logrus.Error(err)
-		ctx.Redirect(http.StatusFound, "/feed")
-		return
-	}
-
-	likes, _ := h.Repository.GetLikesCount(c.ID)
-	preview, isLong := previewRunes(c.Description, descPreviewLen)
-
-	ctx.HTML(http.StatusOK, "cepheids_feed.html", gin.H{
-		"Class":       c,
-		"VideoURL":    mediaURL(c.VideoKey, "/static/img/default.mp4"),
-		"ImageURL":    mediaURL(c.ImageKey, "/static/img/default.jpg"),
-		"Likes":       likes,
-		"DescPreview": preview,
-		"IsLong":      isLong,
-	})
-}
-
-// ---------- GET /add ----------
-func (h *Handler) Add(ctx *gin.Context) {
-	draft, err := h.Repository.GetDraftClass(currentUserID)
-	if err != nil {
-		// черновика нет — форма создания с дефолтными медиа
-		ctx.HTML(http.StatusOK, "cepheids_draft.html", gin.H{
-			"HasDraft":       false,
-			"Draft":          ds.SpectralClass{},
-			"ImageURL":       mediaURL("", "/static/img/default.jpg"),
-			"VideoURL":       mediaURL("", "/static/img/default.mp4"),
-			"SlopeValue":     "",
-			"InterceptValue": "",
-		})
-		return
-	}
-
-	ctx.HTML(http.StatusOK, "cepheids_draft.html", gin.H{
-		"HasDraft":       true,
-		"Draft":          draft,
-		"ImageURL":       mediaURL(draft.ImageKey, "/static/img/default.jpg"),
-		"VideoURL":       mediaURL(draft.VideoKey, "/static/img/default.mp4"),
-		"SlopeValue":     floatToStr(draft.PlSlope, ""),
-		"InterceptValue": floatToStr(draft.PlIntercept, ""),
-	})
-}
-
-// ---------- GET /classes ----------
-type ClassCard struct {
-	ID           int
-	Name         string
-	ImageURL     string
-	SlopeStr     string
-	InterceptStr string
-	LikesCount   int64
-}
-
-func (h *Handler) Classes(ctx *gin.Context) {
+// GET /api/cepheids — список с фильтрацией (только опубликованные)
+func (h *Handler) GetCepheids(ctx *gin.Context) {
 	minSlopeStr := ctx.Query("min_slope")
 	maxSlopeStr := ctx.Query("max_slope")
 	minBStr := ctx.Query("min_b")
@@ -144,84 +43,224 @@ func (h *Handler) Classes(ctx *gin.Context) {
 
 	classes, err := h.Repository.GetFilteredClasses(minSlope, maxSlope, minB, maxB)
 	if err != nil {
-		logrus.Error(err)
+		ctx.Status(http.StatusInternalServerError)
+		return
 	}
 
-	cards := []ClassCard{}
-	for _, c := range classes {
-		likes, _ := h.Repository.GetLikesCount(c.ID)
-		cards = append(cards, ClassCard{
-			ID:           c.ID,
-			Name:         c.Name,
-			ImageURL:     mediaURL(c.ImageKey, "/static/img/default.jpg"),
-			SlopeStr:     floatToStr(c.PlSlope, "—"),
-			InterceptStr: floatToStr(c.PlIntercept, "—"),
-			LikesCount:   likes,
-		})
+	currentUser := GetCurrentUserID()
+	for i := range classes {
+		classes[i].ImageURL = h.mediaURL(classes[i].ImageKey)
+		classes[i].VideoURL = h.mediaURL(classes[i].VideoKey)
+		likes, _ := h.Repository.GetLikesCount(classes[i].ID)
+		classes[i].LikesCount = likes
+		classes[i].IsMine = (classes[i].CreatorID == currentUser)
+		classes[i].IsLiked, _ = h.Repository.IsLikedByUser(classes[i].ID, currentUser)
 	}
 
-	ctx.HTML(http.StatusOK, "cepheids_grid.html", gin.H{
-		"Cards":    cards,
-		"MinSlope": minSlopeStr,
-		"MaxSlope": maxSlopeStr,
-		"MinB":     minBStr,
-		"MaxB":     maxBStr,
-	})
+	ctx.JSON(http.StatusOK, classes)
 }
 
-// ---------- POST /add (создание черновика) ----------
-func (h *Handler) CreateDraft(ctx *gin.Context) {
+// GET /api/cepheids/feed — лента (первый опубликованный)
+func (h *Handler) GetFeed(ctx *gin.Context) {
+	classes, err := h.Repository.GetPublishedClasses()
+	if err != nil || len(classes) == 0 {
+		ctx.Status(http.StatusNotFound)
+		return
+	}
+
+	c := classes[0]
+	currentUser := GetCurrentUserID()
+	c.ImageURL = h.mediaURL(c.ImageKey)
+	c.VideoURL = h.mediaURL(c.VideoKey)
+	likes, _ := h.Repository.GetLikesCount(c.ID)
+	c.LikesCount = likes
+	c.IsMine = (c.CreatorID == currentUser)
+	c.IsLiked, _ = h.Repository.IsLikedByUser(c.ID, currentUser)
+
+	ctx.JSON(http.StatusOK, c)
+}
+
+// GET /api/cepheids/feed/:id — лента по ID + ?next=true
+func (h *Handler) GetFeedByID(ctx *gin.Context) {
+	idStr := ctx.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		ctx.Status(http.StatusBadRequest)
+		return
+	}
+
+	var c ds.SpectralClass
+	if ctx.Query("next") == "true" {
+		c, err = h.Repository.GetNextClass(id)
+	} else {
+		c, err = h.Repository.GetClassByID(id)
+	}
+
+	if err != nil {
+		ctx.Status(http.StatusNotFound)
+		return
+	}
+
+	currentUser := GetCurrentUserID()
+	c.ImageURL = h.mediaURL(c.ImageKey)
+	c.VideoURL = h.mediaURL(c.VideoKey)
+	likes, _ := h.Repository.GetLikesCount(c.ID)
+	c.LikesCount = likes
+	c.IsMine = (c.CreatorID == currentUser)
+	c.IsLiked, _ = h.Repository.IsLikedByUser(c.ID, currentUser)
+
+	ctx.JSON(http.StatusOK, c)
+}
+
+// GET /api/cepheids/draft — получение черновика текущего пользователя
+func (h *Handler) GetDraft(ctx *gin.Context) {
+	draft, err := h.Repository.GetDraftClass(GetCurrentUserID())
+	if err != nil {
+		ctx.Status(http.StatusNotFound)
+		return
+	}
+
+	draft.ImageURL = h.mediaURL(draft.ImageKey)
+	draft.VideoURL = h.mediaURL(draft.VideoKey)
+
+	ctx.JSON(http.StatusOK, draft)
+}
+
+// POST /api/cepheids — создание + загрузка файлов
+func (h *Handler) CreateCepheid(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	if name == "" {
-		ctx.Redirect(http.StatusFound, "/add")
+		ctx.Status(http.StatusBadRequest)
 		return
 	}
-	_, err := h.Repository.CreateDraft(currentUserID, name)
+
+	// Получаем файлы
+	imageFile, _ := ctx.FormFile("image")
+	videoFile, _ := ctx.FormFile("video")
+
+	// Генерируем имена файлов
+	imageKey := ""
+	videoKey := ""
+
+	if imageFile != nil {
+		imageKey = fmt.Sprintf("cepheid_%d_%d.jpg", GetCurrentUserID(), time.Now().Unix())
+		uploadedKey, err := h.MinioClient.UploadFile(imageFile, imageKey)
+		if err != nil {
+			logrus.Error(err)
+			ctx.Status(http.StatusInternalServerError)
+			return
+		}
+		imageKey = uploadedKey
+	}
+
+	if videoFile != nil {
+		videoKey = fmt.Sprintf("cepheid_%d_%d.mp4", GetCurrentUserID(), time.Now().Unix())
+		uploadedKey, err := h.MinioClient.UploadFile(videoFile, videoKey)
+		if err != nil {
+			logrus.Error(err)
+			ctx.Status(http.StatusInternalServerError)
+			return
+		}
+		videoKey = uploadedKey
+	}
+
+	// Создаем в БД
+	cepheid, err := h.Repository.CreateCepheid(GetCurrentUserID(), name, imageKey, videoKey)
 	if err != nil {
 		logrus.Error(err)
+		ctx.Status(http.StatusInternalServerError)
+		return
 	}
-	ctx.Redirect(http.StatusFound, "/add")
+
+	cepheid.ImageURL = h.mediaURL(cepheid.ImageKey)
+	cepheid.VideoURL = h.mediaURL(cepheid.VideoKey)
+
+	ctx.JSON(http.StatusCreated, cepheid)
 }
 
-// ---------- POST /publish (публикация черновика) ----------
-func (h *Handler) Publish(ctx *gin.Context) {
-	idStr := ctx.PostForm("class_id")
+// PUT /api/cepheids/:id/publish — публикация + возврат обновлённого объекта
+func (h *Handler) PublishCepheid(ctx *gin.Context) {
+	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/add")
+		ctx.Status(http.StatusBadRequest)
 		return
 	}
 
-	description := ctx.PostForm("description")
-
-	// Пустая строка -> ParseFloat ошибается -> указатель остаётся nil (поле не заполнено)
-	var slope, intercept *float64
-	if v, e := strconv.ParseFloat(ctx.PostForm("pl_slope"), 64); e == nil {
-		slope = &v
+	var req struct {
+		Description string  `json:"description"`
+		PlSlope     float64 `json:"pl_slope"`
+		PlIntercept float64 `json:"pl_intercept"`
 	}
-	if v, e := strconv.ParseFloat(ctx.PostForm("pl_intercept"), 64); e == nil {
-		intercept = &v
-	}
-
-	// Передаём УКАЗАТЕЛИ без разыменования — иначе panic при пустых полях
-	if err := h.Repository.PublishClass(id, currentUserID, description, slope, intercept); err != nil {
-		logrus.Error(err)
-		ctx.Redirect(http.StatusFound, "/add")
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.Status(http.StatusBadRequest)
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/classes")
+
+	if err := h.Repository.PublishClass(id, GetCurrentUserID(), req.Description, req.PlSlope, req.PlIntercept); err != nil {
+		ctx.Status(http.StatusNotFound)
+		return
+	}
+
+	// Дочитываем обновлённую запись — теперь она published, GetClassByID её найдёт
+	updated, err := h.Repository.GetClassByID(id)
+	if err != nil {
+		ctx.Status(http.StatusNotFound)
+		return
+	}
+
+	// Обогащаем теми же служебными полями, что и в GET/POST
+	updated.ImageURL = h.mediaURL(updated.ImageKey)
+	updated.VideoURL = h.mediaURL(updated.VideoKey)
+	likes, _ := h.Repository.GetLikesCount(updated.ID)
+	updated.LikesCount = likes
+	updated.IsMine = (updated.CreatorID == GetCurrentUserID())
+	updated.IsLiked, _ = h.Repository.IsLikedByUser(updated.ID, GetCurrentUserID())
+
+	ctx.JSON(http.StatusOK, updated) // ← тело, как у POST
 }
 
-// ---------- POST /classes/delete (soft-delete через SQL-курсор) ----------
-func (h *Handler) DeleteClass(ctx *gin.Context) {
-	idStr := ctx.PostForm("class_id")
+// DELETE /api/cepheids/:id — удаление (только свои)
+func (h *Handler) DeleteCepheid(ctx *gin.Context) {
+	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		h.errorHandler(ctx, http.StatusBadRequest, err)
+		ctx.Status(http.StatusBadRequest)
 		return
 	}
-	if err := h.Repository.DeleteClassSQL(id); err != nil {
+
+	if err := h.Repository.DeleteClassSQL(id, GetCurrentUserID()); err != nil {
 		logrus.Error(err)
+		ctx.Status(http.StatusForbidden)
+		return
 	}
-	ctx.Redirect(http.StatusFound, "/classes")
+
+	ctx.Status(http.StatusOK)
+}
+
+// POST /api/cepheids/:id/like — лайк (0 или 1)
+func (h *Handler) LikeCepheid(ctx *gin.Context) {
+	idStr := ctx.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		ctx.Status(http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Like int `json:"like"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.Status(http.StatusBadRequest)
+		return
+	}
+
+	if req.Like == 1 {
+		h.Repository.AddLike(GetCurrentUserID(), id)
+	} else {
+		h.Repository.RemoveLike(GetCurrentUserID(), id)
+	}
+
+	ctx.Status(http.StatusOK)
 }

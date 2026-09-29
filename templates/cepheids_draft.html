@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Атлас цефеид — добавление</title>
     <link rel="stylesheet" href="/static/styles/style.css">
 </head>
+
 <body>
     <div class="app">
         <div class="page">
@@ -18,7 +20,7 @@
                     <h2 class="block-label">Медиафайлы</h2>
                     <div class="media-row">
                         <figure>
-                            <img src="{{ .ImageURL }}" alt="изображение">
+                            <img src="{{ .ImageURL }}" alt="изображение черновика">
                             <figcaption>Изображение</figcaption>
                         </figure>
                         <figure>
@@ -36,17 +38,17 @@
                     <input class="field" value="{{ .Draft.Name }}" disabled>
                     <label class="field-label">Описание</label>
                     <textarea class="field" name="description" rows="6"
-                              placeholder="Введите описание (можно с переносами строк)" required></textarea>
+                              placeholder="Введите описание (необязательно)">{{ .Draft.Description }}</textarea>
                 </section>
 
                 <section class="block">
                     <h2 class="block-label">Математические параметры</h2>
                     <label class="field-label">Наклон a</label>
                     <input class="field" type="number" step="0.01" name="pl_slope"
-                           placeholder="Например, -2.75" required>
+                           placeholder="Например, -2.75" value="{{ .SlopeValue }}">
                     <label class="field-label">Свободный член b</label>
                     <input class="field" type="number" step="0.01" name="pl_intercept"
-                           placeholder="Например, -1.30" required>
+                           placeholder="Например, -1.30" value="{{ .InterceptValue }}">
                 </section>
 
                 <button class="btn btn-block" type="submit">Опубликовать</button>
@@ -99,4 +101,5 @@
         </nav>
     </div>
 </body>
+
 </html>

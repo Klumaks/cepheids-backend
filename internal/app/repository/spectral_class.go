@@ -90,16 +90,24 @@ func (r *Repository) CreateDraft(creatorID uint, name string) (ds.SpectralClass,
 	return c, err
 }
 
-// PublishClass — смена статуса на published и сохранение полей
-func (r *Repository) PublishClass(id int, creatorID uint, description string, plSlope, plIntercept float64) error {
+// PublishClass — смена статуса на published и сохранение заполненных полей.
+// plSlope/plIntercept — указатели: nil означает «поле не заполнено»,
+// тогда колонка в БД остаётся NULL (поля по теме необязательные).
+func (r *Repository) PublishClass(id int, creatorID uint, description string, plSlope, plIntercept *float64) error {
+	updates := map[string]interface{}{
+		"status":      ds.StatusPublished,
+		"description": description,
+	}
+	if plSlope != nil {
+		updates["pl_slope"] = *plSlope
+	}
+	if plIntercept != nil {
+		updates["pl_intercept"] = *plIntercept
+	}
+
 	res := r.db.Model(&ds.SpectralClass{}).
 		Where("id = ? AND creator_id = ? AND status = ?", id, creatorID, ds.StatusDraft).
-		Updates(map[string]interface{}{
-			"status":       ds.StatusPublished,
-			"description":  description,
-			"pl_slope":     plSlope,
-			"pl_intercept": plIntercept,
-		})
+		Updates(updates)
 	if res.Error != nil {
 		return res.Error
 	}

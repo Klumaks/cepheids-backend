@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -29,6 +30,14 @@ func mediaURL(key, defaultPath string) string {
 		return defaultPath
 	}
 	return minioURL + "/" + key
+}
+
+// floatToStr — форматирует nullable-число для шаблона; nil → placeholder
+func floatToStr(v *float64, placeholder string) string {
+	if v == nil {
+		return placeholder
+	}
+	return fmt.Sprintf("%.2f", *v)
 }
 
 // ---------- GET /feed и /feed/:id ----------
@@ -64,10 +73,9 @@ func (h *Handler) Feed(ctx *gin.Context) {
 	}
 
 	likes, _ := h.Repository.GetLikesCount(c.ID)
-
 	preview, isLong := previewRunes(c.Description, descPreviewLen)
 
-	ctx.HTML(http.StatusOK, "feed.html", gin.H{
+	ctx.HTML(http.StatusOK, "cepheids_feed.html", gin.H{
 		"Class":       c,
 		"VideoURL":    mediaURL(c.VideoKey, "/static/img/default.mp4"),
 		"ImageURL":    mediaURL(c.ImageKey, "/static/img/default.jpg"),
@@ -82,31 +90,35 @@ func (h *Handler) Add(ctx *gin.Context) {
 	draft, err := h.Repository.GetDraftClass(currentUserID)
 	if err != nil {
 		// черновика нет — форма создания с дефолтными медиа
-		ctx.HTML(http.StatusOK, "add.html", gin.H{
-			"HasDraft": false,
-			"Draft":    ds.SpectralClass{},
-			"ImageURL": mediaURL("", "/static/img/default.jpg"),
-			"VideoURL": mediaURL("", "/static/img/default.mp4"),
+		ctx.HTML(http.StatusOK, "cepheids_draft.html", gin.H{
+			"HasDraft":       false,
+			"Draft":          ds.SpectralClass{},
+			"ImageURL":       mediaURL("", "/static/img/default.jpg"),
+			"VideoURL":       mediaURL("", "/static/img/default.mp4"),
+			"SlopeValue":     "",
+			"InterceptValue": "",
 		})
 		return
 	}
 
-	ctx.HTML(http.StatusOK, "add.html", gin.H{
-		"HasDraft": true,
-		"Draft":    draft,
-		"ImageURL": mediaURL(draft.ImageKey, "/static/img/default.jpg"),
-		"VideoURL": mediaURL(draft.VideoKey, "/static/img/default.mp4"),
+	ctx.HTML(http.StatusOK, "cepheids_draft.html", gin.H{
+		"HasDraft":       true,
+		"Draft":          draft,
+		"ImageURL":       mediaURL(draft.ImageKey, "/static/img/default.jpg"),
+		"VideoURL":       mediaURL(draft.VideoKey, "/static/img/default.mp4"),
+		"SlopeValue":     floatToStr(draft.PlSlope, ""),
+		"InterceptValue": floatToStr(draft.PlIntercept, ""),
 	})
 }
 
 // ---------- GET /classes ----------
 type ClassCard struct {
-	ID         int
-	Name       string
-	ImageURL   string
-	Slope      float64
-	Intercept  float64
-	LikesCount int64
+	ID           int
+	Name         string
+	ImageURL     string
+	SlopeStr     string
+	InterceptStr string
+	LikesCount   int64
 }
 
 func (h *Handler) Classes(ctx *gin.Context) {
@@ -139,16 +151,16 @@ func (h *Handler) Classes(ctx *gin.Context) {
 	for _, c := range classes {
 		likes, _ := h.Repository.GetLikesCount(c.ID)
 		cards = append(cards, ClassCard{
-			ID:         c.ID,
-			Name:       c.Name,
-			ImageURL:   mediaURL(c.ImageKey, "/static/img/default.jpg"),
-			Slope:      c.PlSlope,
-			Intercept:  c.PlIntercept,
-			LikesCount: likes,
+			ID:           c.ID,
+			Name:         c.Name,
+			ImageURL:     mediaURL(c.ImageKey, "/static/img/default.jpg"),
+			SlopeStr:     floatToStr(c.PlSlope, "—"),
+			InterceptStr: floatToStr(c.PlIntercept, "—"),
+			LikesCount:   likes,
 		})
 	}
 
-	ctx.HTML(http.StatusOK, "classes.html", gin.H{
+	ctx.HTML(http.StatusOK, "cepheids_grid.html", gin.H{
 		"Cards":    cards,
 		"MinSlope": minSlopeStr,
 		"MaxSlope": maxSlopeStr,
@@ -181,22 +193,22 @@ func (h *Handler) Publish(ctx *gin.Context) {
 	}
 
 	description := ctx.PostForm("description")
-	slopeStr := ctx.PostForm("pl_slope")
-	interceptStr := ctx.PostForm("pl_intercept")
 
-	slope, err1 := strconv.ParseFloat(slopeStr, 64)
-	intercept, err2 := strconv.ParseFloat(interceptStr, 64)
-	if err1 != nil || err2 != nil || description == "" {
-		ctx.Redirect(http.StatusFound, "/add")
-		return
+	// Пустая строка -> ParseFloat ошибается -> указатель остаётся nil (поле не заполнено)
+	var slope, intercept *float64
+	if v, e := strconv.ParseFloat(ctx.PostForm("pl_slope"), 64); e == nil {
+		slope = &v
+	}
+	if v, e := strconv.ParseFloat(ctx.PostForm("pl_intercept"), 64); e == nil {
+		intercept = &v
 	}
 
+	// Передаём УКАЗАТЕЛИ без разыменования — иначе panic при пустых полях
 	if err := h.Repository.PublishClass(id, currentUserID, description, slope, intercept); err != nil {
 		logrus.Error(err)
 		ctx.Redirect(http.StatusFound, "/add")
 		return
 	}
-
 	ctx.Redirect(http.StatusFound, "/classes")
 }
 

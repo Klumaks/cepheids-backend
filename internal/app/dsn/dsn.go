@@ -6,6 +6,9 @@ import (
 )
 
 func FromEnv() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
 	host := os.Getenv("DB_HOST")
 	if host == "" {
 		return ""

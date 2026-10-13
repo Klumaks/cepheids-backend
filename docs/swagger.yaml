@@ -1,0 +1,415 @@
+basePath: /api
+definitions:
+  ds.SpectralClass:
+    properties:
+      created_at:
+        type: string
+      creator_id:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      image_key:
+        type: string
+      image_url:
+        description: Дополнительные поля для API ответов
+        type: string
+      is_liked:
+        type: integer
+      is_mine:
+        type: integer
+      likes_count:
+        type: integer
+      name:
+        type: string
+      pl_intercept:
+        type: number
+      pl_slope:
+        type: number
+      updated_at:
+        type: string
+      video_key:
+        type: string
+      video_url:
+        type: string
+    type: object
+  ds.User:
+    properties:
+      id:
+        type: integer
+      login:
+        type: string
+    type: object
+  handler.CepheidCredentials:
+    properties:
+      login:
+        example: cepheid_observer
+        type: string
+      password:
+        example: observation2026
+        type: string
+    required:
+    - login
+    - password
+    type: object
+  handler.CepheidLike:
+    properties:
+      like:
+        example: 1
+        type: integer
+    required:
+    - like
+    type: object
+  handler.CepheidLoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        example: 3600
+        type: integer
+      token_type:
+        example: Bearer
+        type: string
+      user:
+        $ref: '#/definitions/ds.User'
+    type: object
+  handler.CepheidPublication:
+    properties:
+      description:
+        example: Калибровка зависимости период–светимость
+        type: string
+      pl_intercept:
+        example: -1.4
+        type: number
+      pl_slope:
+        example: -2.76
+        type: number
+    required:
+    - pl_intercept
+    - pl_slope
+    type: object
+info:
+  contact: {}
+  description: 'Спектральные классы цефеид: калибровка зависимости период–светимость,
+    JWT и Redis blacklist.'
+  title: Cepheids API
+  version: "4.0"
+paths:
+  /cepheids:
+    get:
+      parameters:
+      - description: Минимальный наклон зависимости период–светимость
+        in: query
+        name: min_slope
+        type: number
+      - description: Максимальный наклон
+        in: query
+        name: max_slope
+        type: number
+      - description: Минимальный свободный член
+        in: query
+        name: min_b
+        type: number
+      - description: Максимальный свободный член
+        in: query
+        name: max_b
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ds.SpectralClass'
+            type: array
+        "400":
+          description: Некорректный диапазон
+        "500":
+          description: Ошибка БД
+      summary: Спектральные классы цефеид с фильтрацией
+      tags:
+      - Спектральные классы
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Название спектрального класса
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: Изображение
+        in: formData
+        name: image
+        type: file
+      - description: Короткое видео
+        in: formData
+        name: video
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/ds.SpectralClass'
+        "400":
+          description: Некорректные данные
+        "401":
+          description: Требуется действующий JWT
+        "409":
+          description: Черновик уже существует
+        "500":
+          description: Ошибка БД или MinIO
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Создание черновика спектрального класса с файлами
+      tags:
+      - Спектральные классы
+  /cepheids/{id}:
+    delete:
+      parameters:
+      - description: ID спектрального класса
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: Спектральный класс удалён
+        "400":
+          description: Некорректный ID
+        "401":
+          description: Требуется действующий JWT
+        "403":
+          description: Чужой спектральный класс
+        "404":
+          description: Класс не найден
+        "500":
+          description: Ошибка БД
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Логическое удаление своего спектрального класса
+      tags:
+      - Спектральные классы
+  /cepheids/{id}/like:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID опубликованного спектрального класса
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 1 — поставить, 0 — отменить
+        in: body
+        name: appreciation
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CepheidLike'
+      responses:
+        "200":
+          description: Лайк обновлён
+        "400":
+          description: Допускаются только 0 и 1
+        "401":
+          description: Требуется действующий JWT
+        "404":
+          description: Класс не найден
+        "500":
+          description: Ошибка БД
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Поставить или отменить лайк спектрального класса
+      tags:
+      - Спектральные классы
+  /cepheids/{id}/publish:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID спектрального класса
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Описание и коэффициенты период–светимость
+        in: body
+        name: calibration
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CepheidPublication'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ds.SpectralClass'
+        "400":
+          description: Некорректные данные
+        "401":
+          description: Требуется действующий JWT
+        "403":
+          description: Чужой спектральный класс
+        "404":
+          description: Черновик не найден
+        "500":
+          description: Ошибка БД
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Публикация своего черновика спектрального класса
+      tags:
+      - Спектральные классы
+  /cepheids/draft:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ds.SpectralClass'
+        "401":
+          description: Требуется действующий JWT
+        "404":
+          description: Черновика нет
+        "500":
+          description: Ошибка БД
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Черновик спектрального класса текущего наблюдателя
+      tags:
+      - Спектральные классы
+  /cepheids/feed:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ds.SpectralClass'
+        "404":
+          description: Лента пуста
+        "500":
+          description: Ошибка БД
+      summary: Первый опубликованный спектральный класс
+      tags:
+      - Спектральные классы
+  /cepheids/feed/{id}:
+    get:
+      parameters:
+      - description: ID спектрального класса
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Следующий опубликованный класс; в конце переход к первому
+        in: query
+        name: next
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ds.SpectralClass'
+        "400":
+          description: Некорректный ID
+        "404":
+          description: Класс не найден
+        "500":
+          description: Ошибка БД
+      summary: Спектральный класс по ID или следующий в ленте
+      tags:
+      - Спектральные классы
+  /users/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Логин и пароль
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CepheidCredentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.CepheidLoginResponse'
+        "400":
+          description: Некорректные данные
+        "401":
+          description: Неверный логин или пароль
+        "500":
+          description: Ошибка сервера
+      summary: Вход наблюдателя цефеид
+      tags:
+      - Пользователи
+  /users/logout:
+    post:
+      responses:
+        "200":
+          description: JWT отозван
+        "401":
+          description: Требуется действующий JWT
+        "503":
+          description: Redis недоступен
+      security:
+      - CepheidBearer: []
+      summary: Выход наблюдателя и отзыв JWT
+      tags:
+      - Пользователи
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Логин и пароль
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CepheidCredentials'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/ds.User'
+        "400":
+          description: Некорректные данные
+        "409":
+          description: Логин занят
+        "500":
+          description: Ошибка БД
+      summary: Регистрация наблюдателя цефеид
+      tags:
+      - Пользователи
+securityDefinitions:
+  CepheidBearer:
+    description: Введите Bearer и JWT из ответа /api/users/login.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

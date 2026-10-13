@@ -9,6 +9,14 @@ import (
 	"cepheids-backend/internal/api"
 )
 
+// @title Cepheids API
+// @version 4.0
+// @description Спектральные классы цефеид: калибровка зависимости период–светимость, JWT и Redis blacklist.
+// @BasePath /api
+// @securityDefinitions.apikey CepheidBearer
+// @in header
+// @name Authorization
+// @description Введите Bearer и JWT из ответа /api/users/login.
 func main() {
 	// Загружаем переменные окружения
 	_ = godotenv.Load()

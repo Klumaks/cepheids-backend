@@ -70,3 +70,9 @@ func (m *MinioClient) GetFileURL(objectName string) string {
 	}
 	return fmt.Sprintf("http://localhost:9000/%s/%s", m.bucket, objectName)
 }
+func (m *MinioClient) RemoveFile(objectName string) error {
+	if objectName == "" {
+		return nil
+	}
+	return m.client.RemoveObject(context.Background(), m.bucket, objectName, minio.RemoveObjectOptions{})
+}
